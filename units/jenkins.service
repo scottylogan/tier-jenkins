@@ -1,0 +1,32 @@
+[Unit]
+Description=Jenkins
+Requires=docker.service
+After=docker.service
+
+[Service]
+Environment="HOME=/home/core"
+EnvironmentFile=/etc/environment
+EnvironmentFile=/var/lib/apps/jenkins/envvars
+TimeoutStartSec=20min
+ExecStartPre=/usr/bin/docker pull $IMAGE
+ExecStartPre=-/usr/bin/docker rm %n
+ExecStartPre=/bin/bash -c "chmod 755 /var/lib/apps/jenkins/units/restore-jenkins-home.sh && \
+                              /var/lib/apps/jenkins/units/restore-jenkins-home.sh --dryrun=false"
+ExecStartPre=//bin/bash -c "chmod 600 ${JENKINS_HOME}/.ssh/jenkins_ida_rsa"
+ExecStart=/usr/bin/docker run  --rm --name  %n -p ${CI_SERVER_PORT}:8080 \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v ${JENKINS_HOME}:/var/jenkins_home \
+    --add-host ci:${COREOS_PRIVATE_IPV4} \
+    --env JAVA_OPTS=${JAVA_OPTS} \
+    -u root $IMAGE
+ExecStartPost=-/var/lib/apps/bin/route53-register -u -z cluster.local -n ${DNS_RECORD}
+ExecStartPost=/var/lib/apps/bin/elb-register $ELB
+ExecStopPost=/var/lib/apps/bin/elb-deregister $ELB
+ExecStopPost=-/var/lib/apps/bin/route53-register -d -z cluster.local -n ${DNS_RECORD}
+ExecStop=-/usr/bin/docker stop %n
+RestartSec=5
+Restart=always
+
+[X-Fleet]
+X-Conflicts=gitlab*
+MachineMetadata=role=admiral

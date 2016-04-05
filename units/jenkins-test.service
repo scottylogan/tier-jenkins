@@ -1,0 +1,27 @@
+[Unit]
+Description=Jenkins
+Requires=docker.service
+After=docker.service
+
+[Service]
+Environment="HOME=/home/core"
+EnvironmentFile=/etc/environment
+EnvironmentFile=/var/lib/apps/jenkins/envvars-test
+TimeoutStartSec=20min
+#ExecStartPre=/usr/bin/docker pull $IMAGE
+ExecStartPre=/bin/bash -c "if [ ! -d /var/lib/apps-data/jenkins-test ]; then chmod 755 /var/lib/apps/jenkins/units/restore-jenkins-home-test.sh && \
+                              /var/lib/apps/jenkins/units/restore-jenkins-home-test.sh --dryrun=false ; fi"
+ExecStart=/usr/bin/docker run  --rm --name  %n -p ${CI_SERVER_PORT}:8080 \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v ${JENKINS_HOME}:/var/jenkins_home \
+    --add-host ci:${COREOS_PRIVATE_IPV4} \
+    --env JAVA_OPTS=${JAVA_OPTS} \
+    -u root $IMAGE
+ExecStartPost=/var/lib/apps/bin/elb-register $ELB
+ExecStopPost=/var/lib/apps/bin/elb-deregister $ELB
+ExecStop=-/usr/bin/docker stop %n
+RestartSec=5
+Restart=always
+
+[X-Fleet]
+MachineMetadata=role=admiral
